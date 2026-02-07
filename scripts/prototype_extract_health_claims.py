@@ -1,4 +1,4 @@
-"""Prototype script to extract predictions from a transcript.
+"""Prototype script to extract health claims from a transcript.
 
 This script is intentionally a scaffold only for now.
 """
@@ -12,12 +12,12 @@ console = Console()
 
 
 def main(transcript: Path) -> None:
-    """Entry point for prototype extraction."""
+    """Entry point for prototype health-claim extraction."""
     if not transcript.exists():
         raise typer.BadParameter(f"Transcript path does not exist: {transcript}")
 
     console.print(
-        "[yellow]Prototype not implemented yet.[/yellow]\n"
+        "[yellow]Prototype health-claim extractor not implemented yet.[/yellow]\n"
         f"Transcript selected: {transcript}"
     )
 

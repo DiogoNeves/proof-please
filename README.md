@@ -33,7 +33,7 @@ uv sync
 just sync
 just init-db
 just run config
-just prototype path/to/transcript.txt
+just extract-claims path/to/transcript.txt
 uv run proof-please --help
 ```
 

@@ -16,11 +16,11 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """Create initial tables used by the project."""
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS predictions (
+        CREATE TABLE IF NOT EXISTS health_claims (
             id BIGINT PRIMARY KEY,
             source_id TEXT NOT NULL,
             speaker TEXT,
-            prediction_text TEXT NOT NULL,
+            claim_text TEXT NOT NULL,
             extracted_at TIMESTAMP DEFAULT current_timestamp
         )
         """

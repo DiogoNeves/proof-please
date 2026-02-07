@@ -19,17 +19,17 @@ def show_config() -> None:
     console.print(f"[bold]DuckDB path:[/bold] {cfg.duckdb_path}")
 
 
-@app.command("prototype")
-def run_prototype(transcript: Path) -> None:
+@app.command("extract-claims")
+def extract_claims_prototype(transcript: Path) -> None:
     """
-    Placeholder command for running the prediction extraction prototype.
+    Placeholder command for running the health-claim extraction prototype.
 
     Implementation is intentionally deferred.
     """
     if not transcript.exists():
         raise typer.BadParameter(f"Transcript path does not exist: {transcript}")
     console.print(
-        "[yellow]Prototype extractor not implemented yet.[/yellow]\n"
+        "[yellow]Health-claim extractor not implemented yet.[/yellow]\n"
         f"Target transcript: {transcript}"
     )
 

@@ -12,5 +12,5 @@ run *args:
 init-db:
     uv run proof-please init-db
 
-prototype transcript:
-    uv run python scripts/prototype_extract_predictions.py {{transcript}}
+extract-claims transcript:
+    uv run proof-please extract-claims {{transcript}}

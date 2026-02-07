@@ -1,7 +1,7 @@
 [project]
 name = "proof-please"
 version = "0.1.0"
-description = "A small lab for testing how well podcast predictions survive contact with reality."
+description = "An experimental lab for extracting and evaluating health claims from podcasts."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
