@@ -1,0 +1,40 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+Core package code lives in `src/hindsight_machine/`:
+- `cli.py` contains Typer commands (`config`, `init-db`, `prototype`).
+- `config.py` defines runtime settings via `pydantic-settings`.
+- `db.py` manages DuckDB connection and schema bootstrap.
+- `models.py` holds domain models (for example, `Prediction`).
+
+Utility experiments live in `scripts/` (currently `prototype_extract_predictions.py`). Runtime artifacts are stored in `data/` (default DB path: `data/hindsight.duckdb`).
+
+## Build, Test, and Development Commands
+- `uv sync` or `just sync`: install and lock project dependencies.
+- `just run config`: print active app configuration.
+- `just init-db`: create/update the local DuckDB schema.
+- `just prototype path/to/transcript.txt`: run prototype extractor scaffold.
+- `uv run hindsight-machine --help`: view all CLI commands.
+
+## Coding Style & Naming Conventions
+Use Python 3.11+ conventions with 4-space indentation and explicit type hints on public functions. Keep modules focused and small, and follow existing naming patterns:
+- modules/functions: `snake_case`
+- classes: `PascalCase`
+- constants/env vars: `UPPER_SNAKE_CASE` (for example `HM_DUCKDB_PATH`)
+
+Prefer concise docstrings (current codebase uses them consistently) and avoid adding new dependencies unless required.
+
+## Testing Guidelines
+There is no committed test suite yet. For new features, add `pytest` tests under `tests/` mirroring the source layout (for example `tests/test_db.py`). Focus first on deterministic logic in `db.py`, `config.py`, and CLI argument validation. Run tests with `uv run pytest` once tests are present.
+
+## Commit & Pull Request Guidelines
+Current history is minimal (`Initial commit`), so keep commit messages short, imperative, and descriptive (for example `Add DuckDB schema migration guard`).
+
+For PRs, include:
+- a brief summary of behavior changes
+- linked issue/task ID when available
+- verification steps/commands run locally
+- sample CLI output when user-visible behavior changes
+
+## Configuration & Data Notes
+Settings load from environment and `.env` with prefix `HM_`. Keep local database files in `data/` and do not commit generated DB contents.
