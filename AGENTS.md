@@ -33,6 +33,8 @@ This project is experimental, so build in small, reversible steps and adapt as t
 
 When collaborating (human or AI), ask clarifying questions when requirements are ambiguous. Work from a Staff Engineer perspective: explain tradeoffs, suggest pragmatic alternatives, and prioritize solutions that keep learning velocity high.
 
+Transcript ingestion is also in prototype mode: `skills/get-transcript-from-url/scripts/extract_web_transcript.py` and `scripts/normalize_raw_transcript_segments.py` are temporary scripts for the initial version only. Plan to replace them with a more scalable, source-agnostic ingestion/normalization solution.
+
 ## Commit & Pull Request Guidelines
 Current history is minimal (`Initial commit`), so keep commit messages short, imperative, and descriptive (for example `Add DuckDB schema migration guard`).
 
