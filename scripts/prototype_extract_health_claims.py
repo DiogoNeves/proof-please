@@ -1,25 +1,378 @@
-"""Prototype script to extract health claims from a transcript.
+"""Prototype script to extract health claims from a normalized transcript using Ollama."""
 
-This script is intentionally a scaffold only for now.
-"""
+from __future__ import annotations
 
+import json
+import re
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
 
 console = Console()
 
+DEFAULT_INPUT = Path("data/transcripts/norm/web__the-ready-state__layne-norton__2022-10-20__v1.json")
+DEFAULT_OUTPUT = Path("data/claims.jsonl")
+DEFAULT_MODELS = "gpt-oss:20b,qwen3:4b"
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 
-def main(transcript: Path) -> None:
-    """Entry point for prototype health-claim extraction."""
+ALLOWED_CLAIM_TYPES = {
+    "medical_risk",
+    "treatment_effect",
+    "nutrition_claim",
+    "exercise_claim",
+    "epidemiology",
+    "other",
+}
+
+
+@dataclass(frozen=True)
+class OllamaConfig:
+    base_url: str
+    timeout: float
+
+
+def _endpoint(base_url: str, path: str) -> str:
+    return f"{base_url.rstrip('/')}{path}"
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[a-zA-Z]*", "", cleaned)
+        cleaned = cleaned.replace("```", "")
+    decoder = json.JSONDecoder()
+    idx = 0
+    last_obj: dict[str, Any] | None = None
+    while True:
+        start = cleaned.find("{", idx)
+        if start == -1:
+            break
+        try:
+            obj, end = decoder.raw_decode(cleaned[start:])
+            if isinstance(obj, dict):
+                last_obj = obj
+            idx = start + end
+        except json.JSONDecodeError:
+            idx = start + 1
+    if last_obj is None:
+        raise ValueError("No JSON object found in model response.")
+    return last_obj
+
+
+def list_ollama_models(config: OllamaConfig) -> list[str]:
+    """Fetch installed model names from Ollama /api/tags."""
+    req = urllib.request.Request(
+        _endpoint(config.base_url, "/api/tags"),
+        headers={"Content-Type": "application/json"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=config.timeout) as resp:
+        data = json.load(resp)
+    models = data.get("models", [])
+    names: list[str] = []
+    for model in models:
+        name = model.get("name") or model.get("model")
+        if isinstance(name, str) and name:
+            names.append(name)
+    return names
+
+
+def ollama_chat(
+    config: OllamaConfig,
+    model: str,
+    messages: list[dict[str, str]],
+) -> str:
+    """Call Ollama /api/chat and return message content."""
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "think": False,
+        "options": {"temperature": 0.1},
+    }
+    req = urllib.request.Request(
+        _endpoint(config.base_url, "/api/chat"),
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=config.timeout) as resp:
+        body = json.load(resp)
+    message = body.get("message", {})
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise ValueError("Ollama response missing message content.")
+    return content
+
+
+def build_segment_block(segments: list[dict[str, Any]], max_segments: int) -> str:
+    """Render transcript segments as compact lines for the LLM prompt."""
+    lines: list[str] = []
+    for segment in segments[:max_segments]:
+        seg_id = str(segment.get("seg_id", "")).strip()
+        speaker = str(segment.get("speaker", "")).strip()
+        start = int(segment.get("start_time_s", 0))
+        text = re.sub(r"\s+", " ", str(segment.get("text", "")).strip())
+        if not seg_id or not text:
+            continue
+        lines.append(f"{seg_id} | {start} | {speaker} | {text}")
+    return "\n".join(lines)
+
+
+def build_prompt(doc_id: str, segment_block: str) -> list[dict[str, str]]:
+    """Build strict JSON extraction prompt."""
+    system = (
+        "You extract health and medical claims from transcripts. "
+        "Return JSON only with this shape: "
+        '{"claims":[{"speaker":"...","claim_text":"...","evidence":[{"seg_id":"...","quote":"..."}],'
+        '"time_range_s":{"start":0,"end":0},"claim_type":"medical_risk"}]}. '
+        "Do not add markdown or commentary."
+    )
+    user = (
+        f"Document ID: {doc_id}\n\n"
+        "Task:\n"
+        "1) Extract factual health claims from the transcript snippets below.\n"
+        "2) Use claim_type from this set only: medical_risk, treatment_effect, nutrition_claim, "
+        "exercise_claim, epidemiology, other.\n"
+        "3) Each claim must include at least one evidence item with an exact seg_id and quote.\n"
+        "4) time_range_s.start and end must be integer seconds; derive from evidence segment starts.\n"
+        "5) Skip greetings, ads, social chatter, and purely motivational statements.\n\n"
+        "Transcript segments:\n"
+        f"{segment_block}\n"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+def _normalize_evidence(evidence: Any) -> list[dict[str, str]]:
+    if not isinstance(evidence, list):
+        return []
+    output: list[dict[str, str]] = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        seg_id = str(item.get("seg_id", "")).strip()
+        quote = str(item.get("quote", "")).strip()
+        if seg_id and quote:
+            output.append({"seg_id": seg_id, "quote": quote})
+    return output
+
+
+def _derive_time_range(
+    claim: dict[str, Any],
+    fallback_start: int = 0,
+    fallback_end: int | None = None,
+) -> dict[str, int]:
+    if fallback_end is None:
+        fallback_end = fallback_start
+    time_range = claim.get("time_range_s", {})
+    if isinstance(time_range, dict):
+        start = time_range.get("start", fallback_start)
+        end = time_range.get("end", fallback_end)
+    else:
+        start = fallback_start
+        end = fallback_end
+    try:
+        start_i = int(start)
+        end_i = int(end)
+    except (TypeError, ValueError):
+        start_i = fallback_start
+        end_i = fallback_start
+    if end_i < start_i:
+        end_i = start_i
+    return {"start": start_i, "end": end_i}
+
+
+def normalize_claims(
+    doc_id: str,
+    model: str,
+    raw_claims: list[dict[str, Any]],
+    start_time_by_seg_id: dict[str, int],
+    start_id: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Normalize model output into final JSONL rows."""
+    out: list[dict[str, Any]] = []
+    next_id = start_id
+    for claim in raw_claims:
+        if not isinstance(claim, dict):
+            continue
+        speaker = str(claim.get("speaker", "")).strip()
+        claim_text = str(claim.get("claim_text", "")).strip()
+        evidence = _normalize_evidence(claim.get("evidence"))
+        if not claim_text or not evidence:
+            continue
+        evidence_starts = [
+            start_time_by_seg_id[ev["seg_id"]]
+            for ev in evidence
+            if ev["seg_id"] in start_time_by_seg_id
+        ]
+        fallback_start = min(evidence_starts) if evidence_starts else 0
+        fallback_end = max(evidence_starts) if evidence_starts else fallback_start
+        claim_type = str(claim.get("claim_type", "other")).strip() or "other"
+        if claim_type not in ALLOWED_CLAIM_TYPES:
+            claim_type = "other"
+        time_range = _derive_time_range(
+            claim,
+            fallback_start=fallback_start,
+            fallback_end=fallback_end,
+        )
+        out.append(
+            {
+                "claim_id": f"clm_{next_id:06d}",
+                "doc_id": doc_id,
+                "speaker": speaker,
+                "claim_text": claim_text,
+                "evidence": evidence,
+                "time_range_s": time_range,
+                "claim_type": claim_type,
+                "model": model,
+            }
+        )
+        next_id += 1
+    return out, next_id
+
+
+def load_transcript(path: Path) -> tuple[str, list[dict[str, Any]]]:
+    """Load normalized transcript JSON and return doc_id plus segments."""
+    with path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    doc_id = str(data.get("doc_id", "")).strip()
+    segments = data.get("segments", [])
+    if not doc_id:
+        raise ValueError("Transcript JSON missing doc_id.")
+    if not isinstance(segments, list) or not segments:
+        raise ValueError("Transcript JSON missing segments.")
+    return doc_id, segments
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Write claims to JSONL."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
+        for row in rows:
+            file.write(json.dumps(row, ensure_ascii=False))
+            file.write("\n")
+
+
+def main(
+    transcript: Path = typer.Option(
+        DEFAULT_INPUT,
+        "--transcript",
+        help="Path to normalized transcript JSON with segments.",
+    ),
+    output: Path = typer.Option(
+        DEFAULT_OUTPUT,
+        "--output",
+        help="Output JSONL file path.",
+    ),
+    models: str = typer.Option(
+        DEFAULT_MODELS,
+        "--models",
+        help="Comma-separated Ollama model names to run for comparison.",
+    ),
+    ollama_url: str = typer.Option(
+        DEFAULT_OLLAMA_URL,
+        "--ollama-url",
+        help="Ollama base URL.",
+    ),
+    timeout: float = typer.Option(
+        180.0,
+        "--timeout",
+        help="Ollama request timeout in seconds.",
+    ),
+    max_segments: int = typer.Option(
+        450,
+        "--max-segments",
+        help="Maximum transcript segments sent to the model.",
+    ),
+    list_models_only: bool = typer.Option(
+        False,
+        "--list-models",
+        help="Only list installed Ollama models and exit.",
+    ),
+) -> None:
+    """Run claim extraction with one or more Ollama models and write JSONL output."""
     if not transcript.exists():
         raise typer.BadParameter(f"Transcript path does not exist: {transcript}")
+    if max_segments <= 0:
+        raise typer.BadParameter("--max-segments must be > 0")
 
-    console.print(
-        "[yellow]Prototype health-claim extractor not implemented yet.[/yellow]\n"
-        f"Transcript selected: {transcript}"
-    )
+    model_list = [model.strip() for model in models.split(",") if model.strip()]
+    if not model_list:
+        raise typer.BadParameter("No models provided.")
+
+    config = OllamaConfig(base_url=ollama_url, timeout=timeout)
+
+    try:
+        available_models = list_ollama_models(config)
+        if available_models:
+            console.print("[bold]Installed Ollama models[/bold]:")
+            for model_name in available_models:
+                console.print(f"  - {model_name}")
+        else:
+            console.print("[yellow]No models returned by /api/tags.[/yellow]")
+        missing = [name for name in model_list if name not in available_models]
+        if missing:
+            console.print(f"[yellow]Requested models not found in /api/tags: {missing}[/yellow]")
+    except urllib.error.URLError as exc:
+        raise typer.BadParameter(f"Could not connect to Ollama at {ollama_url}: {exc}") from exc
+
+    if list_models_only:
+        return
+
+    doc_id, segments = load_transcript(transcript)
+    start_time_by_seg_id = {
+        str(segment.get("seg_id", "")).strip(): int(segment.get("start_time_s", 0))
+        for segment in segments
+        if str(segment.get("seg_id", "")).strip()
+    }
+    segment_block = build_segment_block(segments, max_segments=max_segments)
+    messages = build_prompt(doc_id, segment_block)
+
+    all_rows: list[dict[str, Any]] = []
+    next_claim_id = 1
+
+    for model in model_list:
+        console.print(f"[cyan]Running extraction with model:[/cyan] {model}")
+        try:
+            response_text = ollama_chat(config=config, model=model, messages=messages)
+        except urllib.error.URLError as exc:
+            console.print(f"[red]Failed request for model {model}: {exc}[/red]")
+            continue
+        except Exception as exc:  # noqa: BLE001 - keep prototype error handling simple
+            console.print(f"[red]Model {model} failed: {exc}[/red]")
+            continue
+
+        try:
+            payload = _extract_json_object(response_text)
+        except ValueError as exc:
+            console.print(f"[red]Could not parse JSON response for {model}: {exc}[/red]")
+            continue
+
+        claims = payload.get("claims", [])
+        if not isinstance(claims, list):
+            console.print(f"[yellow]Model {model} returned no claims list.[/yellow]")
+            continue
+
+        normalized_rows, next_claim_id = normalize_claims(
+            doc_id=doc_id,
+            model=model,
+            raw_claims=claims,
+            start_time_by_seg_id=start_time_by_seg_id,
+            start_id=next_claim_id,
+        )
+        all_rows.extend(normalized_rows)
+        console.print(f"[green]Model {model} produced {len(normalized_rows)} claims.[/green]")
+
+    write_jsonl(output, all_rows)
+    console.print(f"[bold green]Wrote {len(all_rows)} claims to {output}[/bold green]")
 
 
 if __name__ == "__main__":
