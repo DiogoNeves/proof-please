@@ -93,7 +93,11 @@ def ollama_chat(
         "messages": messages,
         "stream": False,
         "think": False,
-        "options": {"temperature": 0.1},
+        "format": "json",
+        "options": {
+            "temperature": 0.0,
+            "num_predict": 1200,
+        },
     }
     req = urllib.request.Request(
         _endpoint(config.base_url, "/api/chat"),
@@ -124,7 +128,7 @@ def build_segment_block(segments: list[dict[str, Any]], max_segments: int) -> st
     return "\n".join(lines)
 
 
-def build_prompt(doc_id: str, segment_block: str) -> list[dict[str, str]]:
+def build_prompt(doc_id: str, segment_block: str, chunk_label: str) -> list[dict[str, str]]:
     """Build strict JSON extraction prompt."""
     system = (
         "You extract health and medical claims from transcripts. "
@@ -135,13 +139,15 @@ def build_prompt(doc_id: str, segment_block: str) -> list[dict[str, str]]:
     )
     user = (
         f"Document ID: {doc_id}\n\n"
+        f"Chunk: {chunk_label}\n\n"
         "Task:\n"
-        "1) Extract factual health claims from the transcript snippets below.\n"
+        "1) Extract as many distinct factual health claims as possible from the transcript snippets below.\n"
         "2) Use claim_type from this set only: medical_risk, treatment_effect, nutrition_claim, "
         "exercise_claim, epidemiology, other.\n"
         "3) Each claim must include at least one evidence item with an exact seg_id and quote.\n"
         "4) time_range_s.start and end must be integer seconds; derive from evidence segment starts.\n"
-        "5) Skip greetings, ads, social chatter, and purely motivational statements.\n\n"
+        "5) Prefer recall over precision: include explicit claims about risk, causality, effects, "
+        "recommendations, prevalence, biomarkers, or dose-response.\n\n"
         "Transcript segments:\n"
         f"{segment_block}\n"
     )
@@ -190,16 +196,71 @@ def _derive_time_range(
     return {"start": start_i, "end": end_i}
 
 
+def build_chunks(
+    segments: list[dict[str, Any]],
+    chunk_size: int,
+    chunk_overlap: int,
+) -> list[list[dict[str, Any]]]:
+    """Split segments into overlapping chunks."""
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be > 0")
+    if chunk_overlap < 0:
+        raise ValueError("chunk_overlap must be >= 0")
+    if chunk_overlap >= chunk_size:
+        raise ValueError("chunk_overlap must be smaller than chunk_size")
+
+    chunks: list[list[dict[str, Any]]] = []
+    step = chunk_size - chunk_overlap
+    for start in range(0, len(segments), step):
+        chunk = segments[start : start + chunk_size]
+        if not chunk:
+            continue
+        chunks.append(chunk)
+        if start + chunk_size >= len(segments):
+            break
+    return chunks
+
+
+def _claim_dedupe_key(row: dict[str, Any]) -> tuple[str, str, tuple[str, ...]]:
+    normalized_text = re.sub(r"\W+", " ", str(row.get("claim_text", "")).lower()).strip()
+    evidence = row.get("evidence", [])
+    seg_ids = tuple(
+        sorted(
+            str(item.get("seg_id", "")).strip()
+            for item in evidence
+            if isinstance(item, dict) and str(item.get("seg_id", "")).strip()
+        )
+    )
+    return (str(row.get("model", "")), normalized_text, seg_ids)
+
+
+def dedupe_and_assign_claim_ids(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate repeated chunk claims and assign final claim IDs."""
+    unique_rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, tuple[str, ...]]] = set()
+    for row in rows:
+        key = _claim_dedupe_key(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_rows.append(row)
+
+    final_rows: list[dict[str, Any]] = []
+    for index, row in enumerate(unique_rows, start=1):
+        updated = dict(row)
+        updated["claim_id"] = f"clm_{index:06d}"
+        final_rows.append(updated)
+    return final_rows
+
+
 def normalize_claims(
     doc_id: str,
     model: str,
     raw_claims: list[dict[str, Any]],
     start_time_by_seg_id: dict[str, int],
-    start_id: int,
-) -> tuple[list[dict[str, Any]], int]:
+) -> list[dict[str, Any]]:
     """Normalize model output into final JSONL rows."""
     out: list[dict[str, Any]] = []
-    next_id = start_id
     for claim in raw_claims:
         if not isinstance(claim, dict):
             continue
@@ -225,7 +286,6 @@ def normalize_claims(
         )
         out.append(
             {
-                "claim_id": f"clm_{next_id:06d}",
                 "doc_id": doc_id,
                 "speaker": speaker,
                 "claim_text": claim_text,
@@ -235,8 +295,7 @@ def normalize_claims(
                 "model": model,
             }
         )
-        next_id += 1
-    return out, next_id
+    return out
 
 
 def load_transcript(path: Path) -> tuple[str, list[dict[str, Any]]]:
@@ -288,21 +347,42 @@ def main(
         help="Ollama request timeout in seconds.",
     ),
     max_segments: int = typer.Option(
-        450,
+        0,
         "--max-segments",
-        help="Maximum transcript segments sent to the model.",
+        help="Optional cap on transcript segments to process (0 = all).",
+    ),
+    chunk_size: int = typer.Option(
+        45,
+        "--chunk-size",
+        help="Transcript segments per model call.",
+    ),
+    chunk_overlap: int = typer.Option(
+        12,
+        "--chunk-overlap",
+        help="Segment overlap between adjacent chunks.",
     ),
     list_models_only: bool = typer.Option(
         False,
         "--list-models",
         help="Only list installed Ollama models and exit.",
     ),
+    list_claims: bool = typer.Option(
+        True,
+        "--list-claims/--no-list-claims",
+        help="Print all extracted claims after writing output.",
+    ),
 ) -> None:
     """Run claim extraction with one or more Ollama models and write JSONL output."""
     if not transcript.exists():
         raise typer.BadParameter(f"Transcript path does not exist: {transcript}")
-    if max_segments <= 0:
-        raise typer.BadParameter("--max-segments must be > 0")
+    if max_segments < 0:
+        raise typer.BadParameter("--max-segments must be >= 0")
+    if chunk_size <= 0:
+        raise typer.BadParameter("--chunk-size must be > 0")
+    if chunk_overlap < 0:
+        raise typer.BadParameter("--chunk-overlap must be >= 0")
+    if chunk_overlap >= chunk_size:
+        raise typer.BadParameter("--chunk-overlap must be smaller than --chunk-size")
 
     model_list = [model.strip() for model in models.split(",") if model.strip()]
     if not model_list:
@@ -328,51 +408,82 @@ def main(
         return
 
     doc_id, segments = load_transcript(transcript)
+    if max_segments > 0:
+        segments = segments[:max_segments]
+    chunks = build_chunks(segments, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     start_time_by_seg_id = {
         str(segment.get("seg_id", "")).strip(): int(segment.get("start_time_s", 0))
         for segment in segments
         if str(segment.get("seg_id", "")).strip()
     }
-    segment_block = build_segment_block(segments, max_segments=max_segments)
-    messages = build_prompt(doc_id, segment_block)
 
-    all_rows: list[dict[str, Any]] = []
-    next_claim_id = 1
+    all_rows_raw: list[dict[str, Any]] = []
 
     for model in model_list:
         console.print(f"[cyan]Running extraction with model:[/cyan] {model}")
-        try:
-            response_text = ollama_chat(config=config, model=model, messages=messages)
-        except urllib.error.URLError as exc:
-            console.print(f"[red]Failed request for model {model}: {exc}[/red]")
-            continue
-        except Exception as exc:  # noqa: BLE001 - keep prototype error handling simple
-            console.print(f"[red]Model {model} failed: {exc}[/red]")
-            continue
+        model_rows: list[dict[str, Any]] = []
+        for chunk_index, chunk in enumerate(chunks, start=1):
+            segment_block = build_segment_block(chunk, max_segments=len(chunk))
+            messages = build_prompt(
+                doc_id,
+                segment_block,
+                chunk_label=f"{chunk_index}/{len(chunks)}",
+            )
+            try:
+                response_text = ollama_chat(config=config, model=model, messages=messages)
+            except urllib.error.URLError as exc:
+                console.print(
+                    f"[red]Failed request for model {model}, chunk {chunk_index}: {exc}[/red]"
+                )
+                continue
+            except Exception as exc:  # noqa: BLE001 - keep prototype error handling simple
+                console.print(f"[red]Model {model}, chunk {chunk_index} failed: {exc}[/red]")
+                continue
 
-        try:
-            payload = _extract_json_object(response_text)
-        except ValueError as exc:
-            console.print(f"[red]Could not parse JSON response for {model}: {exc}[/red]")
-            continue
+            try:
+                payload = _extract_json_object(response_text)
+            except ValueError as exc:
+                console.print(
+                    f"[red]Could not parse JSON response for {model}, chunk {chunk_index}: {exc}[/red]"
+                )
+                continue
 
-        claims = payload.get("claims", [])
-        if not isinstance(claims, list):
-            console.print(f"[yellow]Model {model} returned no claims list.[/yellow]")
-            continue
+            claims = payload.get("claims", [])
+            if not isinstance(claims, list):
+                console.print(
+                    f"[yellow]Model {model}, chunk {chunk_index} returned no claims list.[/yellow]"
+                )
+                continue
 
-        normalized_rows, next_claim_id = normalize_claims(
-            doc_id=doc_id,
-            model=model,
-            raw_claims=claims,
-            start_time_by_seg_id=start_time_by_seg_id,
-            start_id=next_claim_id,
+            normalized_rows = normalize_claims(
+                doc_id=doc_id,
+                model=model,
+                raw_claims=claims,
+                start_time_by_seg_id=start_time_by_seg_id,
+            )
+            model_rows.extend(normalized_rows)
+            console.print(
+                f"[green]{model} chunk {chunk_index}/{len(chunks)}: "
+                f"{len(normalized_rows)} claims[/green]"
+            )
+
+        deduped_model_rows = dedupe_and_assign_claim_ids(model_rows)
+        all_rows_raw.extend(deduped_model_rows)
+        console.print(
+            f"[green]Model {model} produced {len(deduped_model_rows)} unique claims "
+            f"across {len(chunks)} chunks.[/green]"
         )
-        all_rows.extend(normalized_rows)
-        console.print(f"[green]Model {model} produced {len(normalized_rows)} claims.[/green]")
 
+    all_rows = dedupe_and_assign_claim_ids(all_rows_raw)
     write_jsonl(output, all_rows)
     console.print(f"[bold green]Wrote {len(all_rows)} claims to {output}[/bold green]")
+    if list_claims:
+        console.print("[bold]Extracted claims[/bold]:")
+        for row in all_rows:
+            console.print(
+                f"{row['claim_id']} | {row['model']} | {row['speaker']} | "
+                f"{row['claim_type']} | {row['claim_text']}"
+            )
 
 
 if __name__ == "__main__":
