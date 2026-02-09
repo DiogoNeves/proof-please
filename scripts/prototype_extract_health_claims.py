@@ -135,7 +135,7 @@ def build_prompt(doc_id: str, segment_block: str, chunk_label: str) -> list[dict
         "You extract health and medical claims from transcripts. "
         "Return JSON only with this shape: "
         '{"claims":[{"speaker":"...","claim_text":"...","evidence":[{"seg_id":"...","quote":"..."}],'
-        '"time_range_s":{"start":0,"end":0},"claim_type":"medical_risk"}]}. '
+        '"time_range_s":{"start":0,"end":0},"claim_type":"medical_risk","boldness_rating":2}]}. '
         "Do not add markdown or commentary."
     )
     user = (
@@ -147,7 +147,11 @@ def build_prompt(doc_id: str, segment_block: str, chunk_label: str) -> list[dict
         "exercise_claim, epidemiology, other.\n"
         "3) Each claim must include at least one evidence item with an exact seg_id and quote.\n"
         "4) time_range_s.start and end must be integer seconds; derive from evidence segment starts.\n"
-        "5) Prefer recall over precision: include explicit claims about risk, causality, effects, "
+        "5) Add boldness_rating on a 1-3 scale for how bold/surprising the claim is:\n"
+        "   1 = common/unsurprising mainstream statement\n"
+        "   2 = moderately strong or somewhat surprising statement\n"
+        "   3 = very bold, counter-intuitive, or highly surprising statement\n"
+        "6) Prefer recall over precision: include explicit claims about risk, causality, effects, "
         "recommendations, prevalence, biomarkers, or dose-response.\n\n"
         "Transcript segments:\n"
         f"{segment_block}\n"
@@ -195,6 +199,19 @@ def _derive_time_range(
     if end_i < start_i:
         end_i = start_i
     return {"start": start_i, "end": end_i}
+
+
+def _normalize_boldness_rating(claim: dict[str, Any]) -> int:
+    raw_value = claim.get("boldness_rating", claim.get("surprise_rating", 2))
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = 2
+    if value < 1:
+        return 1
+    if value > 3:
+        return 3
+    return value
 
 
 def build_chunks(
@@ -285,8 +302,8 @@ def build_query_prompt(claims_block: str, chunk_label: str) -> list[dict[str, st
     """Prompt to generate literature-search queries for validating claims."""
     system = (
         "You generate literature-search queries to validate health claims. "
-        "Every `query` must be a single question about scientific consensus for a claim "
-        "or a small set of similar claims. "
+        "Every `query` must be a single, natural-sounding question that helps evaluate "
+        "scientific consensus for a claim or a small set of similar claims. "
         "Return JSON only with this shape: "
         '{"queries":[{"claim_id":"clm_000001","query":"...","why_this_query":"...",'
         '"preferred_sources":["systematic review","meta-analysis","guideline"]}]}.'
@@ -296,15 +313,19 @@ def build_query_prompt(claims_block: str, chunk_label: str) -> list[dict[str, st
         "Task:\n"
         "1) Given the claims below, generate as many high-value validation queries as possible.\n"
         "2) You may merge very similar claims into one query and use one representative claim_id.\n"
-        "3) Write each query as a consensus question, e.g. "
-        "\"What is the current scientific consensus on whether LDL cholesterol is an "
+        "3) Phrase each query naturally and directly as a question that a human would type in search.\n"
+        "   Good: \"Is LDL cholesterol an independent risk factor for heart disease?\"\n"
+        "   Good: \"Does reducing saturated fat lower LDL cholesterol?\"\n"
+        "   Bad: \"What is the current scientific consensus on whether LDL cholesterol is an "
         "independent risk factor for heart disease?\"\n"
         "4) Keep queries concise and optimized for evidence retrieval.\n"
-        "5) Do not append source types inside `query`; keep source types only in "
+        "5) Do not use repetitive scaffolding such as \"What is the current scientific consensus on...\".\n"
+        "6) Prefer question openings like Is/Are/Does/Do/Can/Should/How much.\n"
+        "7) Do not append source types inside `query`; keep source types only in "
         "`preferred_sources`.\n"
-        "6) Prefer source types like systematic review, meta-analysis, guideline, "
+        "8) Prefer source types like systematic review, meta-analysis, guideline, "
         "mendelian randomisation, RCT.\n"
-        "7) Return JSON only.\n\n"
+        "9) Return JSON only.\n\n"
         "Claims:\n"
         f"{claims_block}\n"
     )
@@ -327,9 +348,7 @@ def normalize_query_rows(
         query = re.sub(r"\s+", " ", str(row.get("query", "")).strip())
         why_this_query = re.sub(r"\s+", " ", str(row.get("why_this_query", "")).strip())
         preferred_sources = row.get("preferred_sources", [])
-        if query and "?" not in query:
-            normalized_query = query.rstrip(" .")
-            query = f"What is the current scientific consensus on {normalized_query}?"
+        query = _naturalize_query_question(query)
         if claim_id not in valid_claim_ids:
             continue
         if not query or not why_this_query:
@@ -383,6 +402,57 @@ def _sources_for_claim_type(claim_type: str) -> list[str]:
     if claim_type == "epidemiology":
         return ["systematic review", "meta-analysis", "cohort study", "guideline"]
     return ["systematic review", "meta-analysis", "guideline"]
+
+
+def _naturalize_query_question(text: str) -> str:
+    """Convert repetitive consensus phrasing into short natural questions."""
+    query = re.sub(r"\s+", " ", text.strip())
+    if not query:
+        return ""
+
+    # Strip common repetitive wrappers.
+    patterns = [
+        r"(?i)^what is the current scientific consensus on whether (.+)\??$",
+        r"(?i)^what is the current scientific consensus on the claim that (.+)\??$",
+        r"(?i)^what is the current scientific consensus on (.+)\??$",
+    ]
+    for pattern in patterns:
+        match = re.match(pattern, query)
+        if match:
+            query = match.group(1).strip()
+            break
+
+    query = query.rstrip(" .")
+    if not query:
+        return ""
+    if query.endswith("?"):
+        return query
+
+    # If already starts with an auxiliary verb, just add '?'.
+    if re.match(
+        r"(?i)^(is|are|can|could|should|would|do|does|did|has|have|had|will|was|were)\b",
+        query,
+    ):
+        return f"{query}?"
+
+    # Basic statement->question transforms.
+    match = re.match(r"(?i)^(.+?)\s+is\s+(.+)$", query)
+    if match:
+        return f"Is {match.group(1).strip()} {match.group(2).strip()}?"
+    match = re.match(r"(?i)^(.+?)\s+are\s+(.+)$", query)
+    if match:
+        return f"Are {match.group(1).strip()} {match.group(2).strip()}?"
+    match = re.match(r"(?i)^(.+?)\s+can\s+(.+)$", query)
+    if match:
+        return f"Can {match.group(1).strip()} {match.group(2).strip()}?"
+    match = re.match(r"(?i)^(.+?)\s+does\s+not\s+(.+)$", query)
+    if match:
+        return f"Does {match.group(1).strip()} not {match.group(2).strip()}?"
+    match = re.match(r"(?i)^(.+?)\s+do\s+not\s+(.+)$", query)
+    if match:
+        return f"Do {match.group(1).strip()} not {match.group(2).strip()}?"
+
+    return f"Is it true that {query}?"
 
 
 def _clean_query_terms(claim_text: str, max_terms: int = 12) -> str:
@@ -447,7 +517,7 @@ def generate_heuristic_queries(claims: list[dict[str, Any]]) -> list[dict[str, A
             continue
         existing_token_groups.append(tokens)
         source_types = _sources_for_claim_type(claim_type)
-        query = f"What is the current scientific consensus on the claim that {claim_text}?"
+        query = _naturalize_query_question(claim_text)
         rows.append(
             {
                 "claim_id": claim_id,
@@ -571,6 +641,7 @@ def normalize_claims(
         claim_type = str(claim.get("claim_type", "other")).strip() or "other"
         if claim_type not in ALLOWED_CLAIM_TYPES:
             claim_type = "other"
+        boldness_rating = _normalize_boldness_rating(claim)
         time_range = _derive_time_range(
             claim,
             fallback_start=fallback_start,
@@ -584,6 +655,7 @@ def normalize_claims(
                 "evidence": evidence,
                 "time_range_s": time_range,
                 "claim_type": claim_type,
+                "boldness_rating": boldness_rating,
                 "model": model,
             }
         )
