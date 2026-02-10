@@ -862,53 +862,94 @@ def run_query_generation(
 app = typer.Typer(help="Prototype commands for extracting health claims and validation queries.")
 
 
+TRANSCRIPT_OPTION = typer.Option(
+    DEFAULT_INPUT,
+    "--transcript",
+    help="Path to normalized transcript JSON with segments.",
+)
+CLAIMS_OUTPUT_OPTION = typer.Option(
+    DEFAULT_OUTPUT,
+    "--output",
+    help="Output JSONL file path for extracted claims.",
+)
+CLAIMS_INPUT_OPTION = typer.Option(
+    DEFAULT_OUTPUT,
+    "--claims-input",
+    help="Existing claims JSONL used as query-generation input.",
+)
+QUERIES_OUTPUT_OPTION = typer.Option(
+    DEFAULT_QUERIES_OUTPUT,
+    "--queries-output",
+    help="Output JSONL file for validation queries.",
+)
+MODELS_OPTION = typer.Option(
+    DEFAULT_MODELS,
+    "--models",
+    help="Comma-separated model names for extraction and query-model fallback selection.",
+)
+QUERY_MODEL_OPTION = typer.Option(
+    None,
+    "--query-model",
+    help="Model for query generation (default: first available model from --models).",
+)
+OLLAMA_URL_OPTION = typer.Option(
+    DEFAULT_OLLAMA_URL,
+    "--ollama-url",
+    help="Ollama base URL.",
+)
+TIMEOUT_OPTION = typer.Option(
+    180.0,
+    "--timeout",
+    help="Ollama request timeout in seconds.",
+)
+MAX_SEGMENTS_OPTION = typer.Option(
+    0,
+    "--max-segments",
+    help="Optional cap on transcript segments to process (0 = all).",
+)
+CHUNK_SIZE_OPTION = typer.Option(
+    45,
+    "--chunk-size",
+    help="Transcript segments per model call.",
+)
+CHUNK_OVERLAP_OPTION = typer.Option(
+    12,
+    "--chunk-overlap",
+    help="Segment overlap between adjacent chunks.",
+)
+QUERY_CHUNK_SIZE_OPTION = typer.Option(
+    25,
+    "--query-chunk-size",
+    help="Claims per query-generation model call.",
+)
+QUERY_CHUNK_OVERLAP_OPTION = typer.Option(
+    5,
+    "--query-chunk-overlap",
+    help="Claims overlap between query-generation chunks.",
+)
+LIST_CLAIMS_OPTION = typer.Option(
+    True,
+    "--list-claims/--no-list-claims",
+    help="Print extracted claims after writing output.",
+)
+LIST_QUERIES_OPTION = typer.Option(
+    True,
+    "--list-queries/--no-list-queries",
+    help="Print generated validation queries after writing output.",
+)
+
+
 @app.command("extract-claims")
 def extract_claims_command(
-    transcript: Path = typer.Option(
-        DEFAULT_INPUT,
-        "--transcript",
-        help="Path to normalized transcript JSON with segments.",
-    ),
-    output: Path = typer.Option(
-        DEFAULT_OUTPUT,
-        "--output",
-        help="Output JSONL file path.",
-    ),
-    models: str = typer.Option(
-        DEFAULT_MODELS,
-        "--models",
-        help="Comma-separated Ollama model names to run for comparison.",
-    ),
-    ollama_url: str = typer.Option(
-        DEFAULT_OLLAMA_URL,
-        "--ollama-url",
-        help="Ollama base URL.",
-    ),
-    timeout: float = typer.Option(
-        180.0,
-        "--timeout",
-        help="Ollama request timeout in seconds.",
-    ),
-    max_segments: int = typer.Option(
-        0,
-        "--max-segments",
-        help="Optional cap on transcript segments to process (0 = all).",
-    ),
-    chunk_size: int = typer.Option(
-        45,
-        "--chunk-size",
-        help="Transcript segments per model call.",
-    ),
-    chunk_overlap: int = typer.Option(
-        12,
-        "--chunk-overlap",
-        help="Segment overlap between adjacent chunks.",
-    ),
-    list_claims: bool = typer.Option(
-        True,
-        "--list-claims/--no-list-claims",
-        help="Print all extracted claims after writing output.",
-    ),
+    transcript: Path = TRANSCRIPT_OPTION,
+    output: Path = CLAIMS_OUTPUT_OPTION,
+    models: str = MODELS_OPTION,
+    ollama_url: str = OLLAMA_URL_OPTION,
+    timeout: float = TIMEOUT_OPTION,
+    max_segments: int = MAX_SEGMENTS_OPTION,
+    chunk_size: int = CHUNK_SIZE_OPTION,
+    chunk_overlap: int = CHUNK_OVERLAP_OPTION,
+    list_claims: bool = LIST_CLAIMS_OPTION,
 ) -> None:
     """Extract claims from transcript segments and write claims JSONL."""
     model_list = _parse_model_list(models)
@@ -934,51 +975,15 @@ def extract_claims_command(
 
 @app.command("generate-queries")
 def generate_queries_command(
-    claims_input: Path = typer.Option(
-        DEFAULT_OUTPUT,
-        "--claims-input",
-        help="Existing claims JSONL used as query-generation input.",
-    ),
-    queries_output: Path = typer.Option(
-        DEFAULT_QUERIES_OUTPUT,
-        "--queries-output",
-        help="Output JSONL file for validation queries.",
-    ),
-    models: str = typer.Option(
-        DEFAULT_MODELS,
-        "--models",
-        help="Comma-separated model names used as fallback selection order.",
-    ),
-    query_model: str | None = typer.Option(
-        None,
-        "--query-model",
-        help="Explicit model for query generation.",
-    ),
-    ollama_url: str = typer.Option(
-        DEFAULT_OLLAMA_URL,
-        "--ollama-url",
-        help="Ollama base URL.",
-    ),
-    timeout: float = typer.Option(
-        180.0,
-        "--timeout",
-        help="Ollama request timeout in seconds.",
-    ),
-    query_chunk_size: int = typer.Option(
-        25,
-        "--query-chunk-size",
-        help="Claims per query-generation model call.",
-    ),
-    query_chunk_overlap: int = typer.Option(
-        5,
-        "--query-chunk-overlap",
-        help="Claims overlap between query-generation chunks.",
-    ),
-    list_queries: bool = typer.Option(
-        True,
-        "--list-queries/--no-list-queries",
-        help="Print generated validation queries after writing output.",
-    ),
+    claims_input: Path = CLAIMS_INPUT_OPTION,
+    queries_output: Path = QUERIES_OUTPUT_OPTION,
+    models: str = MODELS_OPTION,
+    query_model: str | None = QUERY_MODEL_OPTION,
+    ollama_url: str = OLLAMA_URL_OPTION,
+    timeout: float = TIMEOUT_OPTION,
+    query_chunk_size: int = QUERY_CHUNK_SIZE_OPTION,
+    query_chunk_overlap: int = QUERY_CHUNK_OVERLAP_OPTION,
+    list_queries: bool = LIST_QUERIES_OPTION,
 ) -> None:
     """Generate validation queries from an existing claims JSONL file."""
     _validate_path_exists(claims_input, "--claims-input")
@@ -1010,76 +1015,20 @@ def generate_queries_command(
 
 @app.command("run-pipeline")
 def run_pipeline_command(
-    transcript: Path = typer.Option(
-        DEFAULT_INPUT,
-        "--transcript",
-        help="Path to normalized transcript JSON with segments.",
-    ),
-    output: Path = typer.Option(
-        DEFAULT_OUTPUT,
-        "--output",
-        help="Output JSONL file path for extracted claims.",
-    ),
-    queries_output: Path = typer.Option(
-        DEFAULT_QUERIES_OUTPUT,
-        "--queries-output",
-        help="Output JSONL file path for validation queries.",
-    ),
-    models: str = typer.Option(
-        DEFAULT_MODELS,
-        "--models",
-        help="Comma-separated Ollama model names to run for extraction.",
-    ),
-    query_model: str | None = typer.Option(
-        None,
-        "--query-model",
-        help="Model for query generation (default: first available model from --models).",
-    ),
-    ollama_url: str = typer.Option(
-        DEFAULT_OLLAMA_URL,
-        "--ollama-url",
-        help="Ollama base URL.",
-    ),
-    timeout: float = typer.Option(
-        180.0,
-        "--timeout",
-        help="Ollama request timeout in seconds.",
-    ),
-    max_segments: int = typer.Option(
-        0,
-        "--max-segments",
-        help="Optional cap on transcript segments to process (0 = all).",
-    ),
-    chunk_size: int = typer.Option(
-        45,
-        "--chunk-size",
-        help="Transcript segments per model call.",
-    ),
-    chunk_overlap: int = typer.Option(
-        12,
-        "--chunk-overlap",
-        help="Segment overlap between adjacent chunks.",
-    ),
-    query_chunk_size: int = typer.Option(
-        25,
-        "--query-chunk-size",
-        help="Claims per query-generation model call.",
-    ),
-    query_chunk_overlap: int = typer.Option(
-        5,
-        "--query-chunk-overlap",
-        help="Claims overlap between query-generation chunks.",
-    ),
-    list_claims: bool = typer.Option(
-        True,
-        "--list-claims/--no-list-claims",
-        help="Print extracted claims after writing output.",
-    ),
-    list_queries: bool = typer.Option(
-        True,
-        "--list-queries/--no-list-queries",
-        help="Print generated validation queries after writing output.",
-    ),
+    transcript: Path = TRANSCRIPT_OPTION,
+    output: Path = CLAIMS_OUTPUT_OPTION,
+    queries_output: Path = QUERIES_OUTPUT_OPTION,
+    models: str = MODELS_OPTION,
+    query_model: str | None = QUERY_MODEL_OPTION,
+    ollama_url: str = OLLAMA_URL_OPTION,
+    timeout: float = TIMEOUT_OPTION,
+    max_segments: int = MAX_SEGMENTS_OPTION,
+    chunk_size: int = CHUNK_SIZE_OPTION,
+    chunk_overlap: int = CHUNK_OVERLAP_OPTION,
+    query_chunk_size: int = QUERY_CHUNK_SIZE_OPTION,
+    query_chunk_overlap: int = QUERY_CHUNK_OVERLAP_OPTION,
+    list_claims: bool = LIST_CLAIMS_OPTION,
+    list_queries: bool = LIST_QUERIES_OPTION,
 ) -> None:
     """Run extraction and query generation end-to-end."""
     model_list = _parse_model_list(models)
