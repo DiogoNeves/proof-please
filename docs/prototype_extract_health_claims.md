@@ -12,6 +12,24 @@ The prototype supports:
 
 It uses local Ollama models and writes JSONL artifacts in `data/`.
 
+## Implementation Location
+
+- CLI command/option wiring: `scripts/prototype_extract_health_claims.py`
+- Pipeline implementation: `src/proof_please/pipeline/`
+
+### Module Map (`src/proof_please/pipeline/`)
+
+- `models.py`: lenient Pydantic models for config/transcript/claim/query records.
+- `ollama_client.py`: Ollama `/api/tags` and `/api/chat` calls.
+- `io.py`: transcript/JSONL read-write + JSON extraction from model responses.
+- `chunking.py`: overlap chunking utility.
+- `dedupe.py`: claim/query dedupe + claim ID assignment.
+- `normalize.py`: claim/query normalization and fallback query helpers.
+- `extract_claims.py`: claim-extraction prompt building + stage execution.
+- `generate_queries.py`: query-generation prompt building + stage execution.
+- `pipeline_runner.py`: high-level orchestration for extraction/query stages.
+- `printing.py`: console rendering helpers for claim/query listing.
+
 ## Commands
 
 Run help:

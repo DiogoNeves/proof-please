@@ -10,7 +10,8 @@ The core idea is simple: extract concrete claims from transcript text, query sci
   - `skills/get-transcript-from-url/scripts/extract_web_transcript.py`
   - `scripts/normalize_raw_transcript_segments.py`
 - Claim extraction and query-generation prototype:
-  - `scripts/prototype_extract_health_claims.py`
+  - CLI entrypoint: `scripts/prototype_extract_health_claims.py`
+  - Implementation modules: `src/proof_please/pipeline/`
 - Core app scaffolding:
   - `uv run proof-please config`
   - `uv run proof-please init-db`
