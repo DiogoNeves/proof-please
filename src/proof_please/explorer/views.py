@@ -199,18 +199,36 @@ def render_transcript_with_highlights(
     with transcript_container:
         for segment in document.segments:
             claim_count = highlighted_claim_counts.get(segment.seg_id, 0)
-            classes = ["segment-row"]
             if claim_count > 0:
-                classes.append("segment-row--claimed")
+                suffix = "claim" if claim_count == 1 else "claims"
+                is_active = segment.seg_id == active_seg_id and bool(active_seg_id)
+                active_suffix = "  [selected]" if is_active else ""
+                segment_button_label = (
+                    f"{segment.seg_id}  {_format_timestamp(segment.start_time_s)}  "
+                    f"{segment.speaker or 'Unknown speaker'}  {claim_count} {suffix}{active_suffix}\n"
+                    f"{segment.text}"
+                )
+                st.markdown(
+                    (
+                        f"<div class='segment-pick-anchor' "
+                        f"data-segid='{html.escape(segment.seg_id, quote=True)}'></div>"
+                    ),
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    segment_button_label,
+                    key=f"episode_pick_segment_{document.doc_id}_{segment.seg_id}",
+                    width="stretch",
+                    type="secondary",
+                ):
+                    selected_segment_id = segment.seg_id
+                continue
+
+            classes = ["segment-row"]
             if segment.seg_id == active_seg_id and active_seg_id:
                 classes.append("segment-row--active")
             if normalized_search and normalized_search in segment.text.lower():
                 classes.append("segment-row--match")
-
-            claim_badge = ""
-            if claim_count > 0:
-                suffix = "claim" if claim_count == 1 else "claims"
-                claim_badge = f"<span class='segment-badge'>{claim_count} {suffix}</span>"
 
             segment_html = (
                 f"<article class='{' '.join(classes)}' data-segid='{html.escape(segment.seg_id)}'>"
@@ -218,25 +236,11 @@ def render_transcript_with_highlights(
                 f"<span class='segment-seg-id'>{html.escape(segment.seg_id)}</span>"
                 f"<span>{_format_timestamp(segment.start_time_s)}</span>"
                 f"<span>{html.escape(segment.speaker or 'Unknown speaker')}</span>"
-                f"{claim_badge}"
                 "</div>"
                 f"<p class='segment-row-text'>{html.escape(segment.text)}</p>"
                 "</article>"
             )
-
-            if claim_count > 0:
-                text_col, action_col = st.columns([0.92, 0.08], gap="small")
-                with text_col:
-                    st.markdown(segment_html, unsafe_allow_html=True)
-                with action_col:
-                    if st.button(
-                        "View",
-                        key=f"episode_pick_segment_{document.doc_id}_{segment.seg_id}",
-                        width="content",
-                    ):
-                        selected_segment_id = segment.seg_id
-            else:
-                st.markdown(segment_html, unsafe_allow_html=True)
+            st.markdown(segment_html, unsafe_allow_html=True)
 
     return selected_segment_id
 
@@ -389,7 +393,7 @@ def render_episode_browser(dataset: ExplorerDataset) -> None:
 
     with left_pane:
         st.markdown("### Transcript")
-        st.caption("Highlighted text marks segments with linked claims. Click `View` to inspect linked claims.")
+        st.caption("Highlighted text marks segments with linked claims. Click a highlighted card to inspect them.")
 
         if not segment_ids:
             st.info("Selected episode has no transcript segments.")
@@ -460,6 +464,7 @@ def render_episode_browser(dataset: ExplorerDataset) -> None:
                     "Inspect",
                     key=f"episode_claim_sample_{selected_doc_id}_{row.claim_id}",
                     width="stretch",
+                    type="primary",
                 ):
                     st.session_state["episode_active_claim_id"] = row.claim_id
                     if row.first_seg_id:
@@ -538,6 +543,7 @@ def render_episode_browser(dataset: ExplorerDataset) -> None:
                 "Open Claims debug",
                 key=f"open_claim_debug_{selected_claim.claim_id}",
                 width="stretch",
+                type="primary",
             ):
                 _set_claim_debug_state(selected_claim)
                 st.rerun()
@@ -546,6 +552,7 @@ def render_episode_browser(dataset: ExplorerDataset) -> None:
                 "Open Queries debug",
                 key=f"open_query_debug_{selected_claim.claim_id}",
                 width="stretch",
+                type="primary",
             ):
                 _set_query_debug_state(selected_claim)
                 st.rerun()

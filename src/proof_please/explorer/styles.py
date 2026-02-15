@@ -129,8 +129,32 @@ h1, h2, h3 {
     font-weight: 600;
 }
 
+[data-testid="stRadio"] label p,
+[data-testid="stRadio"] label span,
+[data-testid="stRadio"] label div {
+    color: var(--pp-ink-soft) !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stRadio"] label:has(input:checked) p,
+[data-testid="stRadio"] label:has(input:checked) span,
+[data-testid="stRadio"] label:has(input:checked) div {
+    color: var(--pp-ink) !important;
+    font-weight: 600;
+}
+
 [data-testid="stMarkdownContainer"] p strong {
     color: var(--pp-ink) !important;
+}
+
+[data-testid="stMarkdownContainer"] code,
+[data-testid="stCaptionContainer"] code {
+    background: rgba(23, 58, 48, 0.12);
+    color: #16262d !important;
+    border: 1px solid rgba(23, 58, 48, 0.25);
+    border-radius: 6px;
+    padding: 0.12rem 0.34rem;
+    font-family: 'IBM Plex Mono', monospace;
 }
 
 [data-baseweb="input"] > div,
@@ -165,20 +189,53 @@ h1, h2, h3 {
     color: var(--pp-ink) !important;
 }
 
-[data-testid="stButton"] > button {
+[data-testid="stButton"] > button[kind="primary"] {
     background: #1d5f4d;
     color: #ffffff;
     border: 1px solid #154638;
     font-weight: 600;
 }
 
-[data-testid="stButton"] > button:hover {
+[data-testid="stButton"] > button[kind="primary"]:hover {
     background: #174c3d;
     color: #ffffff;
     border-color: #113629;
 }
 
-[data-testid="stButton"] > button:focus {
+[data-testid="stButton"] > button[kind="primary"]:focus {
+    outline: 2px solid rgba(31, 111, 88, 0.45);
+    outline-offset: 1px;
+}
+
+[data-testid="stButton"] > button[kind="secondary"] {
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.96) 0 58%,
+            rgba(255, 227, 94, 0.96) 58% 92%,
+            rgba(255, 255, 255, 0.96) 92% 100%
+        );
+    border: 1px solid rgba(188, 151, 24, 0.72);
+    border-radius: 8px;
+    color: var(--pp-ink) !important;
+    min-height: 0;
+    padding: 0.54rem 0.68rem;
+    text-align: left;
+    justify-content: flex-start;
+    white-space: pre-wrap;
+    line-height: 1.45;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+[data-testid="stButton"] > button[kind="secondary"]:hover {
+    border-color: rgba(31, 111, 88, 0.6);
+    box-shadow: 0 2px 8px rgba(26, 49, 43, 0.12);
+    color: var(--pp-ink) !important;
+}
+
+[data-testid="stButton"] > button[kind="secondary"]:focus {
     outline: 2px solid rgba(31, 111, 88, 0.45);
     outline-offset: 1px;
 }
@@ -198,15 +255,10 @@ h1, h2, h3 {
     transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.segment-row--claimed {
-    background:
-        linear-gradient(
-            to bottom,
-            rgba(255, 255, 255, 0.96) 0 58%,
-            rgba(255, 227, 94, 0.96) 58% 92%,
-            rgba(255, 255, 255, 0.96) 92% 100%
-        );
-    border-color: rgba(188, 151, 24, 0.72);
+.segment-pick-anchor {
+    height: 0;
+    margin: 0;
+    padding: 0;
 }
 
 .segment-row--active {
@@ -238,18 +290,6 @@ h1, h2, h3 {
 .segment-seg-id {
     font-weight: 600;
     color: var(--pp-ink-muted);
-}
-
-.segment-badge {
-    margin-left: auto;
-    background: rgba(28, 58, 48, 0.12);
-    color: #173a30;
-    border: 1px solid rgba(28, 58, 48, 0.28);
-    border-radius: 999px;
-    padding: 0.1rem 0.46rem;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 0.72rem;
-    font-weight: 600;
 }
 
 .segment-row-text {

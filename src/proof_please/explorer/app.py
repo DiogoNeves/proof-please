@@ -53,7 +53,7 @@ def main() -> None:
             "Transcript JSON or directory",
             value=DEFAULT_TRANSCRIPTS_PATH,
         )
-        if st.button("Reload from disk", width="stretch"):
+        if st.button("Reload from disk", width="stretch", type="primary"):
             _load_dataset_cached.clear()
         st.caption("Paths are resolved from the current working directory.")
 
