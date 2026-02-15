@@ -9,6 +9,18 @@ Return validated domain models from I/O boundaries.
 Keep side-effects in `apps/` or `domains/*/io.*`.  
 Keep pure logic in `domains/*/logic.*`.
 
+## Repository-specific adaptation (`proof-please`)
+
+- Stack: Python 3.11 CLI app (`typer`, `pydantic`, `duckdb`, `rich`) in a single package under `src/proof_please/`.
+- Architecture mapping for this repo:
+  - Side-effect boundaries: `src/proof_please/cli.py`, `src/proof_please/db.py`, `src/proof_please/core/io.py`, `src/proof_please/core/model_client.py`, and `scripts/`.
+  - Pure/deterministic logic: transformation-first modules in `src/proof_please/pipeline/` (for example `normalize.py`, `dedupe.py`, `chunking.py`).
+  - Validation gates: `src/proof_please/domain_models.py` and `src/proof_please/pipeline/models.py`.
+- Explicit exceptions and rationale:
+  - This rubric references `apps/`, `domains/`, and `shared/`; in this repository, map those concepts to modules inside `src/proof_please/` instead of creating new top-level folders.
+  - Transcript ingestion scripts in `scripts/` are temporary prototypes and may mix orchestration and I/O; keep changes small and plan migrations into package modules as behavior stabilizes.
+  - Tooling expectations are adapted to current project setup: use `uv` + `pytest` as required gates; treat `ruff`/`pyright` guidance as optional until configured in `pyproject.toml`.
+
 ---
 
 ## North Star principles

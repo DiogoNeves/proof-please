@@ -27,6 +27,21 @@ Use Python 3.11+ conventions with 4-space indentation and explicit type hints on
 
 Prefer concise docstrings (current codebase uses them consistently) and avoid adding new dependencies unless required.
 
+## Good code rubric
+Required reading for contributors and agents: `good-code-rubric.md`.
+
+When coding or reviewing, follow the rubric and apply these repository-specific mappings:
+- side-effect shell: `src/proof_please/cli.py`, `src/proof_please/db.py`, `src/proof_please/core/io.py`, `src/proof_please/core/model_client.py`, and `scripts/`
+- logic-first modules: keep deterministic transformations in `src/proof_please/pipeline/` pure where practical
+- validation boundaries: parse external data into `pydantic` models early (`src/proof_please/domain_models.py`, `src/proof_please/pipeline/models.py`)
+
+Explicit stack exceptions:
+- this repo is a single-package layout, so rubric references to `apps/`, `domains/`, and `shared/` are conceptual mappings, not required new folders
+- use `uv` + `pytest` as the enforced tooling baseline; `ruff`/`pyright` are recommendations until configured in `pyproject.toml`
+- prototype ingestion scripts may temporarily mix concerns; keep changes small and document intentional tradeoffs
+
+If a rubric rule is intentionally violated, leave a short rationale in code comments or PR notes.
+
 ## Testing Guidelines
 There is no committed test suite yet. For new features, add `pytest` tests under `tests/` mirroring the source layout (for example `tests/test_db.py`). Focus first on deterministic logic in `db.py`, `config.py`, and CLI argument validation. Run tests with `uv run pytest` once tests are present.
 
