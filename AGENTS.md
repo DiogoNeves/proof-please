@@ -11,6 +11,21 @@ Core package code lives in `src/proof_please/`:
 
 Utility experiments live in `scripts/` (for example transcript normalization scripts). Runtime artifacts are stored in `data/` (default DB path: `data/proof_please.duckdb`).
 
+## Streamlit Explorer Purpose
+The Streamlit app in `src/proof_please/explorer/` is the primary UI for transcript-first review of extracted claims.
+
+Primary product workflow:
+- Start in `Episode Browser` (default mode).
+- Browse by source/episode, read transcript context, and inspect linked claims/queries together.
+
+Secondary product workflow:
+- Use `Debug Mode` tabs (`Claims`, `Queries`, `Diagnostics`) for troubleshooting and linkage QA.
+
+Intent:
+- make multi-claim episode review fast and human-readable
+- preserve deterministic navigation between transcript segments, claims, and queries
+- keep debugging tools available without making them the default entrypoint
+
 ## Build, Test, and Development Commands
 - `uv sync` or `just sync`: install and lock project dependencies.
 - `uv add <package>`: add new dependencies and update the lockfile.
@@ -39,6 +54,11 @@ Explicit stack exceptions:
 - this repo is a single-package layout, so rubric references to `apps/`, `domains/`, and `shared/` are conceptual mappings, not required new folders
 - use `uv` + `pytest` as the enforced tooling baseline; `ruff`/`pyright` are recommendations until configured in `pyproject.toml`
 - prototype ingestion scripts may temporarily mix concerns; keep changes small and document intentional tradeoffs
+
+Explorer-specific implementation boundaries:
+- keep deterministic view shaping in `src/proof_please/explorer/view_logic.py`
+- keep Streamlit side effects in `src/proof_please/explorer/views.py` and `src/proof_please/explorer/app.py`
+- keep artifact validation/parsing in `src/proof_please/explorer/models.py` and `src/proof_please/explorer/data_access.py`
 
 If a rubric rule is intentionally violated, leave a short rationale in code comments or PR notes.
 
