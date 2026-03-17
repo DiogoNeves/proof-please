@@ -171,6 +171,9 @@ cython_debug/
 # Keep the data directory, ignore generated data files.
 data/*
 !data/.gitkeep
+!data/outputs/
+data/outputs/*
+!data/outputs/.gitkeep
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
