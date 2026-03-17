@@ -30,6 +30,8 @@ data/*
 data/outputs/*
 !data/outputs/.gitkeep
 !data/transcripts/
+data/transcripts/norm/*
+data/transcripts/raw/*
 !data/transcripts/whisper/
 data/transcripts/whisper/*
 !data/transcripts/whisper/.gitkeep
