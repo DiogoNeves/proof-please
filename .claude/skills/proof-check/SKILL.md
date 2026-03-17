@@ -78,3 +78,11 @@ Write to `data/outputs/proof-check-summary.md`:
 ### Step 4: Print Summary
 
 Print the combined summary to the conversation so the user can see results immediately.
+
+### Step 5: Offer Consensus Lookup (Optional)
+
+After printing the summary, ask the user:
+
+> "Would you like me to look up scientific consensus scores for these queries on consensus.app? I'll use the browser to search each one. (Requires the browser to be open and consensus.app accessible)"
+
+If the user confirms, follow the full workflow from `.claude/skills/get-consensus/SKILL.md` using `data/outputs/queries.jsonl` as input.
