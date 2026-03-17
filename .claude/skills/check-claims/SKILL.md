@@ -17,7 +17,13 @@ If that file does not exist, fall back to: `data/claims.jsonl`
 
 If the user provides a file path as an argument, use that instead.
 
-Read the JSONL file — each line is a JSON object with `claim_id`, `claim_text`, `claim_type`, `speaker`, `boldness_rating`, and other fields.
+Read the JSONL file — each line is a JSON object. See CLAUDE.md for the full schema. Key fields used by this skill:
+- `claim_id` — unique identifier (e.g. `clm_000001`)
+- `claim_text` — the full claim statement
+- `claim_type` — one of: `medical_risk`, `treatment_effect`, `nutrition_claim`, `exercise_claim`, `epidemiology`, `other`
+- `boldness_rating` — 1–3 (prioritise bold/surprising claims for query generation)
+- `speaker` — who made the claim
+- `evidence` — array of `{seg_id, quote}` (for context if needed)
 
 ## Query Generation Rules
 

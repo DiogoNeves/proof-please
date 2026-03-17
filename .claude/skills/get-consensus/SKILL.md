@@ -17,7 +17,11 @@ If that file does not exist, fall back to: `data/claim_queries.jsonl`
 
 If the user provides a file path as an argument, use that instead.
 
-Each line in the JSONL file has: `claim_id`, `query`, `why_this_query`, `preferred_sources`
+Each line is a JSON object. See CLAUDE.md for the full schema. Fields:
+- `claim_id` — links back to the original claim in `claims.jsonl`
+- `query` — the natural-language search query
+- `why_this_query` — explanation of why this query validates the claim
+- `preferred_sources` — array of source types (e.g. `["systematic review", "meta-analysis"]`)
 
 ## Prerequisites
 
