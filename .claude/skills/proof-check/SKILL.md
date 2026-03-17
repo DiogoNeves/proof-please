@@ -11,11 +11,20 @@ Run the complete proof-checking pipeline: extract health claims from a podcast t
 
 ## Input
 
+Accepts a YouTube URL, a local audio/video file path, a transcript JSON file path, or no argument (uses default).
+
 Default transcript: `data/transcripts/norm/web__the-ready-state__layne-norton__2022-10-20__v1.json`
 
-If the user provides a file path as an argument, use that instead.
-
 ## Process
+
+### Step 0: Route Input
+
+Determine what kind of input was provided and acquire a transcript if needed:
+
+- **YouTube URL** (contains `youtube.com` or `youtu.be`): Follow the `/get-youtube-transcript` workflow from `.claude/skills/get-youtube-transcript/SKILL.md` to fetch and save the transcript first. Then use the resulting normalized JSON file as input.
+- **Audio/video file** (extension is `.mp3`, `.mp4`, `.wav`, `.m4a`, `.ogg`, `.flac`, `.webm`, `.avi`, `.mkv`): Follow the `/transcribe-audio` workflow from `.claude/skills/transcribe-audio/SKILL.md` to transcribe and save the transcript first. Then use the resulting normalized JSON file as input.
+- **JSON file path**: Use directly as transcript input.
+- **No argument**: Use the default Layne Norton transcript.
 
 ### Step 1: Extract Claims
 

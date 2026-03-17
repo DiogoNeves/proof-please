@@ -15,7 +15,19 @@ Default transcript: `data/transcripts/norm/web__the-ready-state__layne-norton__2
 
 If the user provides a file path as an argument, use that instead.
 
-Read the full transcript JSON file. The `segments` array contains objects with `seg_id`, `speaker`, `start_time_s`, and `text`. Process ALL segments — no chunking needed.
+Read the full transcript file. This skill accepts multiple formats — detect which one you have and adapt:
+
+### Format Detection
+
+1. **Normalized JSON** (preferred): Has `segments[]` array where each segment has `seg_id`, `speaker`, `start_time_s`, `text`. Use directly as-is.
+
+2. **Whisper JSON**: Has `segments[]` array where each segment has `id`, `start`, `end`, `text` (no `seg_id` field). Use `id` as the segment reference (format as `seg_NNNNNN`), `round(start)` as `start_time_s`, speaker is `"Unknown"`.
+
+3. **Raw transcript JSON**: Has a `raw` field containing unstructured text with `Speaker: [timestamp]` markers (e.g., `"Kelly: [0:00:04]\nHey everyone..."`). Parse the speaker/timestamp markers to create segments.
+
+4. **Plain text / VTT / SRT**: If the file is not JSON, parse it as text. For VTT/SRT, extract text from each cue and use cue timestamps. For plain text, treat paragraphs as segments.
+
+Process ALL segments — no chunking needed.
 
 ## Extraction Rules
 
