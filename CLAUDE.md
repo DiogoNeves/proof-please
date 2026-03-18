@@ -6,7 +6,7 @@ Health claim extraction and scientific validation for podcast transcripts.
 
 - **Normalized transcript**: `data/transcripts/norm/web__the-ready-state__layne-norton__2022-10-20__v1.json`
 - **Raw transcript**: `data/transcripts/raw/web__the-ready-state__layne-norton__2022-10-20__v1.json`
-- **Skill outputs**: `data/outputs/` (claims-report.md, claims.jsonl, queries-report.md, queries.jsonl, consensus-results.md, consensus-results.jsonl)
+- **Skill outputs**: `data/outputs/` (claims-report.md, claims.jsonl, consensus-results.md, consensus-results.jsonl)
 - **Whisper transcripts**: `data/transcripts/whisper/` (raw Whisper JSON, intermediate)
 
 ## Data Schemas
@@ -38,7 +38,9 @@ Produced by `/get-youtube-transcript` and `/transcribe-audio`. Consumed by `/ext
 
 ### Claims (`data/outputs/claims.jsonl`)
 
-One JSON object per line. Produced by `/extract-claims`. Consumed by `/check-claims`.
+One JSON object per line. Produced by `/extract-claims`, enriched in place by `/check-claims`, consumed by `/get-consensus`.
+
+After `/extract-claims` runs, each record has:
 
 ```json
 {
@@ -55,13 +57,12 @@ One JSON object per line. Produced by `/extract-claims`. Consumed by `/check-cla
 }
 ```
 
-### Validation Queries (`data/outputs/queries.jsonl`)
-
-One JSON object per line. Produced by `/check-claims`. Consumed by `/get-consensus`.
+After `/check-claims` runs, three query fields are added to each record:
 
 ```json
 {
   "claim_id": "clm_000001",
+  "...": "all fields above preserved",
   "query": "Is LDL particle count a better predictor of cardiovascular risk than LDL cholesterol?",
   "why_this_query": "Tests whether the claim's preferred biomarker has evidentiary support over standard LDL.",
   "preferred_sources": ["systematic review", "meta-analysis", "mendelian randomisation"]

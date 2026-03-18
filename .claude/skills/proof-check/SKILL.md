@@ -40,7 +40,7 @@ Follow the full workflow from `.claude/skills/check-claims/SKILL.md`:
 
 1. Read the claims from `data/outputs/claims.jsonl` (just created in Step 1)
 2. Generate validation queries using the query rules (see that skill for the 9 rules)
-3. Write `data/outputs/queries-report.md` and `data/outputs/queries.jsonl`
+3. Overwrite `data/outputs/claims.jsonl` with enriched records (query fields added inline)
 
 ### Step 3: Write Combined Summary
 
@@ -70,8 +70,6 @@ Write to `data/outputs/proof-check-summary.md`:
 
 - Claims report: data/outputs/claims-report.md
 - Claims data: data/outputs/claims.jsonl
-- Queries report: data/outputs/queries-report.md
-- Queries data: data/outputs/queries.jsonl
 - This summary: data/outputs/proof-check-summary.md
 ```
 
@@ -85,4 +83,4 @@ After printing the summary, ask the user:
 
 > "Would you like me to look up scientific consensus scores for these queries on consensus.app? I'll use the browser to search each one. (Requires the browser to be open and consensus.app accessible)"
 
-If the user confirms, follow the full workflow from `.claude/skills/get-consensus/SKILL.md` using `data/outputs/queries.jsonl` as input.
+If the user confirms, follow the full workflow from `.claude/skills/get-consensus/SKILL.md` using `data/outputs/claims.jsonl` as input.

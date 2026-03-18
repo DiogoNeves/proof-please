@@ -7,7 +7,7 @@ description: Generate scientific validation queries for extracted health claims.
 
 ## Overview
 
-Read extracted health claims and generate literature-search queries to validate each one against scientific evidence. Produce a readable markdown report and a structured JSONL file.
+Read extracted health claims and generate literature-search queries to validate each one against scientific evidence. Enriches `claims.jsonl` in place by adding query fields to each record.
 
 ## Input
 
@@ -42,45 +42,18 @@ Read the JSONL file — each line is a JSON object. See CLAUDE.md for the full s
 
 ## Output
 
-### Markdown Report
-
-Write to `data/outputs/queries-report.md` with this structure:
-
-```markdown
-# Validation Queries: [Episode Title]
-
-**Source claims**: [file path]
-**Date generated**: [today's date]
-
-## Summary
-
-- Total queries generated: N
-- Claims covered: X / Y total claims
-- Preferred source breakdown: systematic review (A), meta-analysis (B), ...
-
-## Queries
-
-### 1. [claim_id] — [short claim summary]
-
-- **Claim**: [claim_text]
-- **Query**: [the search query]
-- **Why**: [why_this_query]
-- **Preferred sources**: systematic review, meta-analysis, ...
-```
-
-### JSONL Data File
-
-Write to `data/outputs/queries.jsonl` with one JSON object per line:
+Enrich `claims.jsonl` in place: read all records, add `query`, `why_this_query`, and `preferred_sources` to each, then overwrite the file. The schema for each enriched record is in CLAUDE.md.
 
 ```json
-{"claim_id":"clm_000001","query":"...","why_this_query":"...","preferred_sources":["systematic review","meta-analysis"]}
+{"claim_id":"clm_000001","doc_id":"...","speaker":"...","claim_text":"...","claim_type":"treatment_effect","boldness_rating":2,"evidence":[{"seg_id":"seg_000042","quote":"..."}],"time_range_s":{"start":312,"end":341},"query":"...","why_this_query":"...","preferred_sources":["systematic review","meta-analysis"]}
 ```
+
+Claims that were merged under a shared query still get their own record; copy the same `query`, `why_this_query`, and `preferred_sources` to each merged claim's record.
 
 ## Process
 
 1. Read the claims JSONL file using the Read tool
 2. Generate validation queries following the rules above
 3. Ensure every claim has at least one query (merge similar claims if appropriate)
-4. Write the markdown report to `data/outputs/queries-report.md`
-5. Write the JSONL file to `data/outputs/queries.jsonl`
-6. Print a brief summary to the conversation (total queries, coverage, source type breakdown)
+4. Overwrite the input JSONL file with enriched records (all original fields preserved, query fields added)
+5. Print a brief summary to the conversation (total queries, coverage, source type breakdown)
