@@ -7,7 +7,7 @@ description: Run the full proof-checking pipeline on a podcast transcript end-to
 
 ## Overview
 
-Run the complete proof-checking pipeline: extract health claims from a podcast transcript, then generate scientific validation queries for each claim. This combines the `/extract-claims` and `/check-claims` skills into one end-to-end workflow.
+Run the complete proof-checking pipeline: extract health claims from a podcast transcript, generate scientific validation queries, then look up scientific consensus for each claim. This combines `/extract-claims`, `/check-claims`, and `/get-consensus` into one end-to-end workflow.
 
 ## Input
 
@@ -42,7 +42,11 @@ Follow the full workflow from `.claude/skills/check-claims/SKILL.md`:
 2. Generate validation queries using the query rules (see that skill for the 9 rules)
 3. Overwrite `data/outputs/claims.jsonl` with enriched records (query fields added inline)
 
-### Step 3: Write Combined Summary
+### Step 3: Look Up Scientific Consensus
+
+Follow the full workflow from `.claude/skills/get-consensus/SKILL.md` using `data/outputs/claims.jsonl` as input.
+
+### Step 4: Write Combined Summary
 
 Write to `data/outputs/proof-check-summary.md`:
 
@@ -57,10 +61,11 @@ Write to `data/outputs/proof-check-summary.md`:
 - Claims extracted: N
 - Validation queries generated: M
 - Claims covered by queries: X / N
+- Consensus searches completed: P / M
 
 ## Boldest Claims (rating 3)
 
-[For each boldness=3 claim, show the claim text and its validation query]
+[For each boldness=3 claim, show the claim text, its validation query, and consensus verdict]
 
 ## All Claims by Type
 
@@ -70,17 +75,10 @@ Write to `data/outputs/proof-check-summary.md`:
 
 - Claims report: data/outputs/claims-report.md
 - Claims data: data/outputs/claims.jsonl
+- Consensus results: data/outputs/consensus-results.md
 - This summary: data/outputs/proof-check-summary.md
 ```
 
-### Step 4: Print Summary
+### Step 5: Print Summary
 
 Print the combined summary to the conversation so the user can see results immediately.
-
-### Step 5: Offer Consensus Lookup (Optional)
-
-After printing the summary, ask the user:
-
-> "Would you like me to look up scientific consensus scores for these queries on consensus.app? I'll use the browser to search each one. (Requires the browser to be open and consensus.app accessible)"
-
-If the user confirms, follow the full workflow from `.claude/skills/get-consensus/SKILL.md` using `data/outputs/claims.jsonl` as input.
